@@ -71,7 +71,7 @@ const workerProgram = Effect.gen(function* () {
         const players = (data as any).Players
         const player = players.find((p: any) => p.Name === playerName)
         if (player) {
-          yield* statsRef.update((s) => ({ ...s, playerTeam: player.TeamNum }))
+          yield* Ref.update(statsRef, (s) => ({ ...s, playerTeam: player.TeamNum }))
           yield* Effect.logInfo(`Found ${playerName} on team ${player.TeamNum}`)
           ipc.send(`status:Found ${playerName} on team ${player.TeamNum}`)
         }
@@ -80,17 +80,17 @@ const workerProgram = Effect.gen(function* () {
       // Track wins/losses on MatchEnded
       if (eventName === 'MatchEnded') {
         const winnerTeam = (data as any).WinnerTeamNum
-        const currentStats = yield* statsRef
+        const currentStats = yield* Ref.get(statsRef)
         const isWin = currentStats.playerTeam === winnerTeam
 
-        yield* statsRef.update((s) => ({
+        yield* Ref.update(statsRef, (s) => ({
           ...s,
           wins: s.wins + (isWin ? 1 : 0),
           losses: s.losses + (isWin ? 0 : 1),
           totalMatches: s.totalMatches + 1
         }))
 
-        const stats = yield* statsRef
+        const stats = yield* Ref.get(statsRef)
         yield* Effect.logInfo(
           `Match ended! ${isWin ? 'Win' : 'Loss'} — ${stats.wins}W/${stats.losses}L/${stats.totalMatches} total`
         )
