@@ -1,5 +1,5 @@
 const { test } = require('brittle')
 
-test('REMOVE ME', (t) => {
+test('placeholder', (t) => {
   t.pass()
 })

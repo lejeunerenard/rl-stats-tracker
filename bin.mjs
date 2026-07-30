@@ -1,11 +1,9 @@
 import { command, flag, summary } from 'paparam'
-import { persistent } from 'bare-storage'
 import process from 'bare-process'
 import os from 'bare-os'
-import { isWindows } from 'which-runtime'
 import path from 'bare-path'
 import pkg from './package.json'
-import App from './app.js'
+import App from './dist/app.js'
 
 const appName = pkg.productName || pkg.name
 const isDev = path.basename(Bare.argv[0]) === 'bare'
@@ -14,8 +12,7 @@ const cmd = command(
   appName,
   summary(pkg.description),
   flag('--version|-v', 'Print the current version'),
-  flag('--storage <dir>', 'custom storage directory'),
-  flag('--no-updates', 'disable OTA updates for this run')
+  flag('--username <name>', 'Rocket League player username to track')
 )
 
 cmd.parse(Bare.argv.slice(isDev ? 2 : 1))
@@ -25,29 +22,43 @@ if (cmd.flags.version) {
   Bare.exit()
 }
 
-const updates = cmd.flags.updates
-const storage = cmd.flags.storage || (isDev ? null : path.join(persistent(), appName))
-const dir = storage || path.join(os.tmpdir(), 'pear', appName)
+const playerName = cmd.flags.username
+if (!playerName) {
+  console.error(`Error: --username is required`)
+  console.error(`Usage: ${appName} --username <player name>`)
+  Bare.exit(1)
+}
 
-console.log(`Updates: ${updates === false ? 'disabled' : 'enabled'}`)
+const app = new App({ playerName })
 
-const app = new App({
-  dir,
-  app: isDev ? null : os.execPath(),
-  updates,
-  version: pkg.version,
-  upgrade: pkg.upgrade,
-  name: isWindows ? appName + '.exe' : appName
+function logStderr(...args) {
+  console.error(...args)
+}
+
+function jsonOut(obj) {
+  process.stdout.write(JSON.stringify(obj) + '\n')
+}
+
+app.on('message', (message) => {
+  if (message.startsWith('status:')) {
+    logStderr(message.slice(7))
+  } else if (message.startsWith('stats:')) {
+    const stats = JSON.parse(message.slice(6))
+    logStderr(`Stats: ${stats.wins}W / ${stats.losses}L / ${stats.totalMatches} matches`)
+    jsonOut({ type: 'stats', stats })
+  } else if (message.startsWith('match:')) {
+    const match = JSON.parse(message.slice(6))
+    logStderr(`Match: ${match.isWin ? 'Win' : 'Loss'} (team ${match.winnerTeam})`)
+    jsonOut({ type: 'match', match })
+  } else if (message.startsWith('error:')) {
+    logStderr(`[worker:error] ${message.slice(6)}`)
+    jsonOut({ type: 'error', error: message.slice(6) })
+  } else {
+    logStderr(message)
+  }
 })
 
-app.on('message', (message) => console.log(message))
-app.on('updating', () => console.log('[updater] getting new update'))
-app.on('updating-delta', (delta) => console.log('[updater]', delta))
-app.on('updated', () => console.log('[updater] update complete... applying'))
-app.on('update-applied', () =>
-  console.log('[updater] applied update, restart to run latest version')
-)
-app.on('error', (err) => console.error('[app:error]', err))
+app.on('error', (err) => logStderr('[app:error]', err))
 
 process.on('SIGHUP', () => app.exit(129))
 process.on('SIGINT', () => app.exit(130))
@@ -56,8 +67,8 @@ process.on('SIGTERM', () => app.exit(143))
 
 try {
   await app.ready()
-  console.log('\nCLI ready. Press Ctrl+C to stop.\n')
+  logStderr(`\nRL Stats Tracker ready. Tracking "${playerName}". Press Ctrl+C to stop.\n`)
 } catch (err) {
-  console.error('[app:error]', err)
+  logStderr('[app:error]', err)
   await app.close().finally(() => Bare.exit(1))
 }
