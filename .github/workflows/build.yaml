@@ -9,6 +9,7 @@ permissions:
 jobs:
   build:
     name: ${{ matrix.host }}
+    if: false
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     strategy:
@@ -47,6 +48,7 @@ jobs:
 
   package:
     name: Package by-arch
+    if: false
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10

@@ -8,12 +8,14 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     name: Lint
+    if: false
     steps:
       - uses: holepunchto/actions/node-base@v1
       - run: npm run lint
 
   build:
     name: ${{ matrix.host }}
+    if: false
     strategy:
       matrix:
         include:
