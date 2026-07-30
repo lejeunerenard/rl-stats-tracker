@@ -1,51 +1,16 @@
-# hello-pear-bare
+# rl-stats-tracker
 
-> Pear Hello World for Standalone Bare Processes with `pear-runtime` worker
+> Rocket League Stats Tracker — tracks wins/losses via the RL Stats API.
 
-End-to-end boilerplate for embedding [pear-runtime] into the [Bare] worker of a [Bare] CLI with peer-to-peer OTA update support.
-
-This boilerplate uses the companion [`hello-pear-worker`][hello-pear-worker] as a reusable cross-platform local backend. Keeping networking, storage and updates in a separate worker lets mobile apps, desktop UIs and standalone Bare applications share the same backend implementation while each parent owns its platform-specific interface.
-
-- Peer-to-Peer deployment with [pear][pear-docs] CLI
-- Peer-to-Peer Over-the-Air updates with [`pear-runtime`][pear-runtime] module
-- Bare worker process via `PearRuntime.run(...)`
-- Cross-platform standalone distributables via [`bare-build`][bare-build]
-
-## Variants
-
-- (current) [`main`](https://github.com/holepunchto/hello-pear-bare/tree/main): runs `pear-runtime` inside a Bare worker thread.
-- [`single-thread`](https://github.com/holepunchto/hello-pear-bare/tree/variant/single-thread): workerless with `pear-runtime` updates.
-- [`daemon`](https://github.com/holepunchto/hello-pear-bare/tree/variant/daemon): runs `pear-runtime` in a detached updater daemon.
-
-## Table of Contents
-
-- [OS Support](#os-support)
-- [Requirements](#requirements)
-- [Development](#development)
-  - [Install Dependencies](#install-dependencies)
-  - [Create an upgrade link](#create-an-upgrade-link)
-  - [Start](#start)
-- [Architecture](#architecture)
-  - [Updates](#updates)
-  - [Workers](#workers)
-- [Peer-to-Peer Deployments](#peer-to-peer-deployments)
-- [Installing Distributables](#installing-distributables)
-- [Scripts](#scripts)
-- [Project Structure](#project-structure)
-- [Troubleshooting](#troubleshooting)
-
-## OS Support
-
-- **macOS** — arm64, x64
-- **Linux** — arm64, x64
-- **Windows** — arm64, x64
+A standalone CLI that connects to the Rocket League Stats API websocket (`127.0.0.1:49123`) and tracks a player's wins, losses, and match history in real-time.
 
 ## Requirements
 
 - `npm` via [Node.js][nodejs]
-- [pear][pear-docs] - `npx pear`
+- [Bare runtime][bare]
+- Rocket League with Stats API enabled (`PacketSendRate > 0` in `DefaultStatsAPI.ini`)
 
-## Development
+## Getting Started
 
 ### Install Dependencies
 
@@ -53,102 +18,43 @@ This boilerplate uses the companion [`hello-pear-worker`][hello-pear-worker] as 
 npm install
 ```
 
-### Create an upgrade link
+### Build Dependencies
 
-This template expects `package.json` to contain a valid `pear://` link in the `upgrade` field. If it still contains the placeholder `pear://<YOUR_KEY_HERE>`, startup will fail with `INVALID_URL`.
-
-Create a link with [`pear touch`](https://docs.pears.com/reference/cli.html#pear-touch-flags-channel):
+The `rl-stats-api` dependency must be compiled before use:
 
 ```sh
-pear touch
+npm run build
 ```
 
-Copy the generated `pear://...` link into the `upgrade` field in `package.json`.
+*Note:* Will be unnecessary eventually. Still experimental.
 
-### Start
-
-Start app in development mode:
+### Run
 
 ```sh
-npm start
+npm start -- --username <player name>
 ```
 
-By default this repo starts with `--no-updates` in development to avoid local dev binaries being swapped while you iterate.
-
-Enable updates for local flow testing:
+Example:
 
 ```sh
-npm start -- --updates
+npm start -- --username SqueakyClean
 ```
 
 ## Architecture
 
-### Updates
-
-Updates are managed by the `App` class in `app.js`, which wraps the updater lifecycle as a ready resource and emits update events for `bin.mjs` to log.
-
-The worker uses `pear-runtime` and the configured `upgrade` link in `package.json`.
-
-Per-run disable updates:
-
-```sh
-npm start -- --no-updates
-```
-
-### Workers
-
-The main CLI starts `workers/main.js` as a Bare sidecar and communicates with it over framed IPC.
-
-## Peer-to-Peer Deployments
-
-Use the [`pear`][pear-docs] CLI to deploy applications.
-
-Set the `upgrade` field in `package.json` to your distribution drive link, then follow the default flow from section 4 onward:
-
-[hello-pear-electron: 4. Build Deployment Directory and onward](https://github.com/holepunchto/hello-pear-electron#4-build-deployment-directory-)
-
-## Installing Distributables
-
-Once the `pear://<key>` upgrade link is seeding the build deployment folder the CLI standalone binary can be installed peer-to-peer directly onto the system with Pear:
-
-```sh
-npx pear-install pear://<key>
-```
-
-## Scripts
-
-- `npm start` - run the Bare CLI in dev mode (`bare bin.mjs --no-updates`)
-- `npm test` - run `brittle-bare` tests
-- `npm run lint` - run prettier check and lunte
-- `npm run format` - format repository with prettier
-- `npm run make` - auto-detect host OS/arch and run matching build target
-- `npm run make:darwin-arm64` - build standalone to `out/darwin-arm64`
-- `npm run make:darwin-x64` - build standalone to `out/darwin-x64`
-- `npm run make:linux-arm64` - build standalone to `out/linux-arm64`
-- `npm run make:linux-x64` - build standalone to `out/linux-x64`
-- `npm run make:win32-arm64` - build standalone to `out/win32-arm64`
-- `npm run make:win32-x64` - build standalone to `out/win32-x64`
-
 ## Project Structure
 
-- `bin.mjs` - CLI entrypoint and runtime wiring
-- `app.js` - update resource used by the entrypoint
-- `workers/main.js` - Bare worker example
-- `scripts/make.js` - platform/arch build target selector
-- `test/index.js` - brittle-bare tests
+- `bin.mjs` — CLI entrypoint and runtime wiring
+- `app.ts` — App class (ReadyResource wrapper, worker spawning, IPC framing)
+- `workers/main.ts` — Effect v3 worker program (stats tracking, event processing)
 
 ## Troubleshooting
 
-- `INVALID_URL: Invalid URL 'pear://<YOUR_KEY_HERE>'` means the placeholder `upgrade` link in `package.json` has not been replaced. Run `pear touch`, then put the generated `pear://...` link in `package.json`.
-- If updates do not trigger, verify `package.json` contains a valid `upgrade` Pear link and that peers are seeding the target drive.
-- If `npm run make` fails on unsupported hosts, run a specific `make:<platform>-<arch>` script or build on a supported host.
-- This template does not implement app-level data persistence; it is a minimal CLI + updater example.
+- **No stats appearing**: Ensure `PacketSendRate > 0` in Rocket League's `DefaultStatsAPI.ini`
+- **Connection errors**: Verify Rocket League is running (Stats API websocket on `127.0.0.1:49123`)
 
 <!-- Reference Links -->
 
-[pear-docs]: https://docs.pears.com
-[hello-pear-worker]: https://github.com/holepunchto/hello-pear-worker
-[pear-runtime]: https://github.com/holepunchto/pear-runtime
-[Bare]: https://github.com/holepunchto/bare
+[bare]: https://github.com/holepunchto/bare
+[Bare runtime]: https://docs.bare.run
 [nodejs]: https://nodejs.org
-[bare-build]: https://github.com/holepunchto/bare-build
