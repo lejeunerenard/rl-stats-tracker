@@ -9,7 +9,7 @@
     "format": "prettier . --write",
     "test": "brittle-bare test/index.ts",
     "lint": "prettier . --check && lunte",
-    "start": "bare bin.mjs --no-updates",
+    "start": "bare bin.mjs",
     "build": "npm run build:rl-stats-api && npm run build:tsc",
     "build:tsc": "tsc",
     "build:rl-stats-api": "cd node_modules/rl-stats-api && ../.bin/tsc",
