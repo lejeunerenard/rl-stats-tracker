@@ -1,6 +1,7 @@
 import { command, flag, summary } from 'paparam'
 import process from 'bare-process'
 import os from 'bare-os'
+import { isWindows } from 'which-runtime'
 import path from 'bare-path'
 import pkg from './package.json'
 import App from './dist/app.js'
