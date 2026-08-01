@@ -1,3 +1,4 @@
+import 'bare-encoding/global'
 import { command, flag, summary } from 'paparam'
 import process from 'bare-process'
 import os from 'bare-os'
@@ -5,8 +6,10 @@ import { isWindows } from 'which-runtime'
 import path from 'bare-path'
 import pkg from './package.json'
 import App from './dist/app.js'
+import { Effect } from 'effect'
 import { ConfigServiceLive } from './dist/services/config.js'
-import { CLIService } from './dist/services/cli-ui.js'
+import { CLIServiceLive } from './dist/services/cli-ui.js'
+import { UIService } from './dist/services/ui.js'
 
 const appName = pkg.productName || pkg.name
 const isDev = path.basename(Bare.argv[0]) === (isWindows ? 'bare.exe' : 'bare')
@@ -29,7 +32,11 @@ if (cmd.flags.version) {
 const configPath = cmd.flags.config || path.join(os.homedir(), '.rl-stats.json')
 
 const configService = new ConfigServiceLive()
-const uiService = new CLIService()
+const uiService = Effect.runSync(
+  Effect.gen(function* () {
+    return yield* UIService
+  }).pipe(Effect.provide(CLIServiceLive))
+)
 
 function logStderr(...args) {
   console.error(...args)

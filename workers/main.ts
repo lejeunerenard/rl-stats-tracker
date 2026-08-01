@@ -1,44 +1,8 @@
-require('bare-encoding/global')
+import 'bare-encoding/global'
 
-import { Effect, Stream, Layer, Ref, Context } from 'effect'
+import { Effect, Either, Option, Stream, Layer, Ref, Context } from 'effect'
+import { RLStatsService, RLStatsServiceLive, ConfigLive, ConnectionServiceLive } from 'rl-stats-api'
 import FramedStream from 'framed-stream'
-
-// rl-stats-api uses // @ts-nocheck so all types resolve as `any`.
-// We define the service types here so Effect's type system works correctly.
-
-interface SocketLike {
-  on: (event: string, handler: (...args: unknown[]) => void) => unknown
-  once: (event: string, handler: (...args: unknown[]) => void) => unknown
-  write: (...args: unknown[]) => unknown
-  destroy: () => unknown
-}
-
-interface RLStatsLive {
-  readonly parsed: Stream.Stream<
-    { type: string; event?: string; data?: unknown; error?: unknown; raw?: string },
-    never
-  >
-  readonly socket: Effect.Effect<SocketLike>
-  readonly connected: Effect.Effect<void, Error>
-  readonly closed: Effect.Effect<void>
-}
-
-interface ConnectionLive {
-  readonly socket: Effect.Effect<SocketLike>
-  readonly connected: Effect.Effect<void, Error>
-  readonly data: Stream.Stream<string>
-  readonly closed: Effect.Effect<void>
-}
-
-interface RLStatsConfig {
-  readonly port: number
-  readonly host: string
-}
-
-declare const RLStatsService: Context.Tag<'@rlstats/Events', RLStatsLive>
-declare const RLStatsServiceLive: Layer.Layer<'@rlstats/Events', unknown>
-declare const ConfigLive: Layer.Layer<RLStatsConfig>
-declare const ConnectionServiceLive: Layer.Layer<'@rlstats/Connection', unknown>
 
 const framed = new FramedStream(Bare.IPC)
 const playerName = (Bare.argv[1] || '').trim()
@@ -47,18 +11,6 @@ const configPath = (Bare.argv[2] || '').trim()
 // ---------------------------------------------------------------------------
 // Event types (re-exported from rl-stats-api which has no .d.ts declarations)
 // ---------------------------------------------------------------------------
-
-interface ParsedEvent {
-  type: 'event'
-  event: string
-  data: UpdateStateData | MatchEndedData
-}
-
-interface SchemaError {
-  type: 'error'
-  error: unknown
-  raw: string
-}
 
 interface UpdateStateData {
   Players: { Name: string; TeamNum: number }[]
@@ -72,13 +24,18 @@ interface MatchEndedData {
 // Stats state (shared between Effect context and IPC handler)
 // ---------------------------------------------------------------------------
 
+interface PlayerInfo {
+  Name: string
+  TeamNum: number
+}
+
 interface StatsState {
   playerName: string
   playerTeam: number | null
   wins: number
   losses: number
   totalMatches: number
-  lastPlayerList: PlayerInfo[]
+  lastPlayerList: readonly PlayerInfo[]
 }
 
 const statsState: StatsState = {
@@ -169,29 +126,26 @@ function findBestMatch(stored, candidates) {
 // Main program
 // ---------------------------------------------------------------------------
 
-interface PlayerInfo {
-  Name: string
-  TeamNum: number
-}
-
 const apiHandler = Effect.gen(function* () {
   const rlStats = yield* RLStatsService
   const stats = yield* StatsService
   const ipc = yield* IPCService
 
-  yield* Stream.runForEach(rlStats.parsed as Stream.Stream<ParsedEvent | SchemaError>, (event) =>
+  yield* Stream.runForEach(rlStats.parsed, (event) =>
     Effect.gen(function* () {
-      if (event.type === 'error') {
-        yield* Effect.logError(`Schema error: ${event.error}`)
-        ipc.send(`error:${JSON.stringify(event.error)}`)
+      if (Either.isLeft(event)) {
+        const error = Either.getLeft(event)
+        yield* Effect.logError(`Schema error: ${error}`)
+        ipc.send(`error:${JSON.stringify(error)}`)
         return
       }
 
-      const { event: eventName, data } = event
+      const o = Either.getRight(event)
+      const { Event, Data } = Option.getOrElse(o, () => ({ Event: 'none' as const, Data: null }))
 
       // Track player team from UpdateState
-      if (eventName === 'UpdateState') {
-        const players = (data as UpdateStateData).Players
+      if (Event === 'UpdateState') {
+        const players = Data.Players
 
         yield* Ref.update(stats, (state) => {
           state.lastPlayerList = players
@@ -234,8 +188,8 @@ const apiHandler = Effect.gen(function* () {
       }
 
       // Track wins/losses on MatchEnded
-      if (eventName === 'MatchEnded') {
-        const winnerTeam = (data as MatchEndedData).WinnerTeamNum
+      if (Event === 'MatchEnded') {
+        const winnerTeam = Data.WinnerTeamNum
         const current = yield* stats
         const isWin = current.playerTeam === winnerTeam
 
@@ -306,7 +260,6 @@ const ipcHandler = Effect.gen(function* () {
 const workerProgram = Effect.gen(function* () {
   yield* Effect.forkDaemon(apiHandler)
   yield* Effect.forkDaemon(ipcHandler)
-  yield* Effect.never
 })
 
 // ---------------------------------------------------------------------------

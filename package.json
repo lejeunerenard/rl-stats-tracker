@@ -30,6 +30,7 @@
     "rl-stats-api": "github:lejeunerenard/rl-stats-api#effect-v3"
   },
   "devDependencies": {
+    "@types/node": "^26.1.2",
     "bare-build": "^1.0.2",
     "bare-runtime": "1.29.4",
     "brittle": "^3.19.0",
