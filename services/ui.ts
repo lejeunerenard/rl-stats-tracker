@@ -1,4 +1,9 @@
-export interface UIService {
-  log(message: string): void
-  promptPlayer(names: string[], currentStored: string): Promise<string>
-}
+import { Context, Effect } from 'effect'
+
+export class UIService extends Context.Tag('@rlstats-tracker/UI')<
+  UIService,
+  {
+    log(message: string): void
+    promptPlayer(names: string[], currentStored: string): Effect.Effect<string>
+  }
+>() {}
