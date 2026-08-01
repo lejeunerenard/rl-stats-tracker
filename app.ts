@@ -4,6 +4,7 @@ import ReadyResource = require('ready-resource')
 
 interface AppOptions {
   playerName: string
+  configPath: string
 }
 
 interface AppEvents {
@@ -16,6 +17,7 @@ interface AppEvents {
 
 export default class App extends ReadyResource {
   playerName: string
+  configPath: string
 
   private IPC: any
   private pipe: FramedStream
@@ -24,13 +26,17 @@ export default class App extends ReadyResource {
     super()
 
     this.playerName = opts.playerName
+    this.configPath = opts.configPath
 
     this.IPC = null
     this.pipe = null as any
   }
 
   async _open() {
-    this.IPC = PearRuntime.run(require.resolve('./workers/main.js'), [this.playerName])
+    this.IPC = PearRuntime.run(require.resolve('./workers/main.js'), [
+      this.playerName,
+      this.configPath
+    ])
     this.pipe = new FramedStream(this.IPC)
 
     this.pipe.on('data', (data: Buffer) => this._onmessage(data))

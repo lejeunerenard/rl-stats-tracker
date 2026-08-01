@@ -5,6 +5,7 @@ import { isWindows } from 'which-runtime'
 import path from 'bare-path'
 import pkg from './package.json'
 import App from './dist/app.js'
+import { ConfigServiceLive } from './dist/services/index.js'
 
 const appName = pkg.productName || pkg.name
 const isDev = path.basename(Bare.argv[0]) === (isWindows ? 'bare.exe' : 'bare')
@@ -13,7 +14,8 @@ const cmd = command(
   appName,
   summary(pkg.description),
   flag('--version|-v', 'Print the current version'),
-  flag('--username <name>', 'Rocket League player username to track')
+  flag('--username <name>', 'Rocket League player username to track (overrides config)'),
+  flag('--config <path>', 'Path to config file (default: ~/.rl-stats.json)')
 )
 
 cmd.parse(Bare.argv.slice(isDev ? 2 : 1))
@@ -23,14 +25,14 @@ if (cmd.flags.version) {
   Bare.exit()
 }
 
-const playerName = cmd.flags.username
+const configPath = cmd.flags.config || path.join(os.homedir(), '.rl-stats.json')
 if (!playerName) {
   console.error(`Error: --username is required`)
   console.error(`Usage: ${appName} --username <player name>`)
   Bare.exit(1)
 }
 
-const app = new App({ playerName })
+const configService = new ConfigServiceLive()
 
 function logStderr(...args) {
   console.error(...args)
@@ -39,6 +41,8 @@ function logStderr(...args) {
 function jsonOut(obj) {
   process.stdout.write(JSON.stringify(obj) + '\n')
 }
+
+const app = new App({ playerName, configPath })
 
 app.on('message', (message) => {
   if (message.startsWith('status:')) {

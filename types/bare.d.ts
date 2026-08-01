@@ -12,6 +12,25 @@ declare var Bare: {
   }
 }
 
+declare namespace BareFs {
+  interface ReadFileOptions {
+    encoding: string
+  }
+  interface WriteFileOptions {
+    encoding: string
+  }
+  interface OpenOptions {
+    mode?: number
+  }
+}
+
+declare var bareFs: {
+  readFile(path: string, options: { encoding: string }): Promise<string>
+  writeFile(path: string, data: string, options: { encoding: string }): Promise<void>
+  existsSync(path: string): boolean
+  mkdirSync(path: string, options?: { recursive: boolean }): void
+}
+
 declare var process: {
   on(event: string, handler: (...args: any[]) => void): void
   exit(code?: number): void

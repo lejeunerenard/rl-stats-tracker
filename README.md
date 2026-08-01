@@ -40,6 +40,35 @@ Example:
 npm start -- --username SqueakyClean
 ```
 
+### Config File
+
+Create `~/.rl-stats.json` to persist your username across runs:
+
+```json
+{
+  "username": "SqueakyClean"
+}
+```
+
+When a config file exists, `--username` is optional. The config can be overridden at any time with the flag.
+
+### Interactive Player Selection
+
+If the stored username doesn't match any player in a match, the app will prompt you to select from the current player list:
+
+```
+Could not match stored username "MyPlayer" to any player in the game.
+Here are the players currently in the match:
+
+  1. SqueakyClean
+  2. PlayerTwo
+  3. MyPlayer-NA
+
+Enter the number of the player you want to track, or type the name directly:
+```
+
+Selecting a player updates the config file automatically.
+
 ## Architecture
 
 ## Project Structure

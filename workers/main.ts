@@ -7,6 +7,7 @@ const FramedStream = require('framed-stream')
 
 const framed = new FramedStream(Bare.IPC)
 const playerName = (Bare.argv[1] || '').trim()
+const configPath = (Bare.argv[2] || '').trim()
 
 // ---------------------------------------------------------------------------
 // Stats state
