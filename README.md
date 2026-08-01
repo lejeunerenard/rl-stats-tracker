@@ -69,6 +69,15 @@ Enter the number of the player you want to track, or type the name directly:
 
 Selecting a player updates the config file automatically.
 
+### Flexible Name Matching
+
+The app uses flexible matching to handle encoding differences:
+
+- Unicode NFC/NFD normalization
+- Case-insensitive comparison
+- Whitespace normalization
+- Substring matching (e.g., "MyPlayer" matches "MyPlayer-NA")
+
 ## Architecture
 
 ## Project Structure

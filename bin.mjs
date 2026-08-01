@@ -5,7 +5,8 @@ import { isWindows } from 'which-runtime'
 import path from 'bare-path'
 import pkg from './package.json'
 import App from './dist/app.js'
-import { ConfigServiceLive } from './dist/services/index.js'
+import { ConfigServiceLive } from './dist/services/config.js'
+import { CLIService } from './dist/services/cli-ui.js'
 
 const appName = pkg.productName || pkg.name
 const isDev = path.basename(Bare.argv[0]) === (isWindows ? 'bare.exe' : 'bare')
@@ -26,13 +27,9 @@ if (cmd.flags.version) {
 }
 
 const configPath = cmd.flags.config || path.join(os.homedir(), '.rl-stats.json')
-if (!playerName) {
-  console.error(`Error: --username is required`)
-  console.error(`Usage: ${appName} --username <player name>`)
-  Bare.exit(1)
-}
 
 const configService = new ConfigServiceLive()
+const uiService = new CLIService()
 
 function logStderr(...args) {
   console.error(...args)
@@ -41,6 +38,25 @@ function logStderr(...args) {
 function jsonOut(obj) {
   process.stdout.write(JSON.stringify(obj) + '\n')
 }
+
+function resolvePlayerName() {
+  if (cmd.flags.username) {
+    return cmd.flags.username
+  }
+
+  const config = configService.load(configPath)
+  if (config && config.username) {
+    logStderr(`Loaded username from config: ${config.username}`)
+    return config.username
+  }
+
+  logStderr(`Error: --username is required`)
+  logStderr(`Run with --username to set your player name, or create ${configPath}`)
+  logStderr(`Example: echo '{"username":"YourName"}' > ${configPath}`)
+  Bare.exit(1)
+}
+
+const playerName = await resolvePlayerName()
 
 const app = new App({ playerName, configPath })
 
@@ -58,10 +74,28 @@ app.on('message', (message) => {
   } else if (message.startsWith('error:')) {
     logStderr(`[worker:error] ${message.slice(6)}`)
     jsonOut({ type: 'error', error: message.slice(6) })
+  } else if (message.startsWith('prompt:choose-player:')) {
+    const payload = JSON.parse(message.slice(21))
+    handlePlayerPrompt(payload)
   } else {
     logStderr(message)
   }
 })
+
+async function handlePlayerPrompt(payload) {
+  const { names, currentStored } = payload
+
+  try {
+    const selectedName = await uiService.promptPlayer(names, currentStored)
+    logStderr(`Selected: ${selectedName}`)
+
+    configService.save(configPath, { username: selectedName })
+
+    app._send(`update-name:${selectedName}`)
+  } catch (err) {
+    // Prompt was cancelled or failed
+  }
+}
 
 app.on('error', (err) => logStderr('[app:error]', err))
 
