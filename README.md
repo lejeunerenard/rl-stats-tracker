@@ -26,7 +26,7 @@ The `rl-stats-api` dependency must be compiled before use:
 npm run build
 ```
 
-*Note:* Will be unnecessary eventually. Still experimental.
+_Note:_ Will be unnecessary eventually. Still experimental.
 
 ### Run
 
