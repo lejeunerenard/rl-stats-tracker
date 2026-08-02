@@ -1,5 +1,5 @@
 import process from 'bare-process'
-import { Effect, Layer, Context } from 'effect'
+import { Effect, Layer } from 'effect'
 import { UIService } from './ui.js'
 
 export const CLIServiceLive = Layer.succeed(UIService, {
