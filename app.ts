@@ -92,8 +92,4 @@ export default class App extends ReadyResource {
     Bare.exitCode = code
     await this.close()
   }
-
-  emit(event: string, ...args: any[]): boolean {
-    return false
-  }
 }
