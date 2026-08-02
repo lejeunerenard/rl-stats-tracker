@@ -8,18 +8,6 @@ const framed = new FramedStream(Bare.IPC)
 const playerName = (Bare.argv[2] || '').trim()
 
 // ---------------------------------------------------------------------------
-// Event types (re-exported from rl-stats-api which has no .d.ts declarations)
-// ---------------------------------------------------------------------------
-
-interface UpdateStateData {
-  Players: { Name: string; TeamNum: number }[]
-}
-
-interface MatchEndedData {
-  WinnerTeamNum: number
-}
-
-// ---------------------------------------------------------------------------
 // Stats state (shared between Effect context and IPC handler)
 // ---------------------------------------------------------------------------
 
@@ -75,11 +63,11 @@ const IPCServiceLive = Layer.succeed(IPCService, {
 // Flexible name matching
 // ---------------------------------------------------------------------------
 
-function normalizeName(name) {
+function normalizeName(name: string) {
   return name.toLowerCase().trim().replace(/\s+/g, ' ')
 }
 
-function matchName(stored, candidate) {
+function matchName(stored: string, candidate: string) {
   const a = normalizeName(stored)
   const b = normalizeName(candidate)
 
@@ -102,7 +90,7 @@ function matchName(stored, candidate) {
   return false
 }
 
-function findBestMatch(stored, candidates) {
+function findBestMatch(stored: string, candidates: string[]) {
   let best = null as any
 
   for (const candidate of candidates) {
