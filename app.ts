@@ -7,14 +7,6 @@ interface AppOptions {
   configPath: string
 }
 
-interface AppEvents {
-  message: [message: string]
-  updating: []
-  updated: []
-  'update-applied': []
-  error: [err: Error]
-}
-
 export default class App extends ReadyResource {
   playerName: string
   configPath: string
@@ -32,7 +24,7 @@ export default class App extends ReadyResource {
     this.pipe = null as any
   }
 
-  _open() {
+  async _open() {
     this.IPC = PearRuntime.run(require.resolve('./workers/main.js'), [
       this.playerName,
       this.configPath
@@ -48,7 +40,7 @@ export default class App extends ReadyResource {
     })
   }
 
-  _close() {
+  async _close() {
     const pipe = this.pipe
     const IPC = this.IPC
 
