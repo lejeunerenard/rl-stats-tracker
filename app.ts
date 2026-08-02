@@ -32,7 +32,7 @@ export default class App extends ReadyResource {
     this.pipe = null as any
   }
 
-  async _open() {
+  _open() {
     this.IPC = PearRuntime.run(require.resolve('./workers/main.js'), [
       this.playerName,
       this.configPath
@@ -46,10 +46,9 @@ export default class App extends ReadyResource {
       if (code === 0 || this.closing !== null || this.closed) return
       this.emit('error', new Error(`Updates worker exited with code ${code}`))
     })
-    await Promise.resolve()
   }
 
-  async _close() {
+  _close() {
     const pipe = this.pipe
     const IPC = this.IPC
 
@@ -58,7 +57,6 @@ export default class App extends ReadyResource {
 
     pipe?.destroy()
     IPC?.destroy()
-    await Promise.resolve()
   }
 
   _onmessage(data: Buffer) {
