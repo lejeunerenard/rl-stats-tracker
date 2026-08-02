@@ -6,7 +6,6 @@ import FramedStream from 'framed-stream'
 
 const framed = new FramedStream(Bare.IPC)
 const playerName = (Bare.argv[2] || '').trim()
-const configPath = (Bare.argv[3] || '').trim()
 
 // ---------------------------------------------------------------------------
 // Event types (re-exported from rl-stats-api which has no .d.ts declarations)
@@ -110,7 +109,6 @@ function findBestMatch(stored, candidates) {
     if (matchName(stored, candidate)) {
       const a = normalizeName(stored)
       const b = normalizeName(candidate)
-      const exactMatch = a === b
 
       let score = -1
       for (let i = 0; i < Math.max(a.length, b.length); i++) {
