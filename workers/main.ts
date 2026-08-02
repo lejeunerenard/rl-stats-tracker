@@ -110,8 +110,17 @@ function findBestMatch(stored, candidates) {
     if (matchName(stored, candidate)) {
       const a = normalizeName(stored)
       const b = normalizeName(candidate)
-      const exactMatch = normalizeName(stored) === normalizeName(candidate)
-      const score = exactMatch ? 2 : Math.max(a.length, b.length)
+      const exactMatch = a === b
+
+      let score = -1
+      for (let i = 0; i < Math.max(a.length, b.length); i++) {
+        if (a[i] === b[i]) {
+          score = i
+          continue
+        }
+
+        break
+      }
 
       if (!best || score > best.score) {
         best = { name: candidate, score }
