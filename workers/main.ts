@@ -117,6 +117,21 @@ function findBestMatch(stored: string, candidates: string[]) {
   return best
 }
 
+function findMatchedPlayer(
+  storedName: string,
+  playerList: readonly PlayerInfo[]
+): Option.Option<PlayerInfo> {
+  return Option.flatMap(
+    Option.fromNullable(
+      findBestMatch(
+        storedName,
+        playerList.map((p) => p.Name)
+      )
+    ),
+    (match) => Option.fromNullable(playerList.find((p) => p.Name === match.name))
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Main program
 // ---------------------------------------------------------------------------
@@ -149,37 +164,36 @@ const apiHandler = Effect.gen(function* () {
 
         const current = yield* stats
         const storedName = current.playerName
-        const bestMatch = findBestMatch(
-          storedName,
-          current.lastPlayerList.map((p) => p.Name)
-        )
+        const player = findMatchedPlayer(storedName, current.lastPlayerList)
 
-        if (bestMatch) {
-          const player = current.lastPlayerList.find((p) => p.Name === bestMatch.name)
-          if (player) {
-            yield* Ref.update(stats, (state) => {
-              state.playerTeam = player.TeamNum
-              return state
+        yield* Option.match(player, {
+          onNone: () =>
+            Effect.gen(function* () {
+              yield* Effect.logWarning(
+                `No match found for "${storedName}" in current player list: ${current.lastPlayerList.map((p) => p.Name).join(', ')}`
+              )
+              yield* Ref.update(stats, (state) => {
+                state.playerTeam = null
+                return state
+              })
+              ipc.send(
+                `status:No match found for "${storedName}". Waiting for next match to prompt selection.`
+              )
+            }),
+          onSome: (matched) =>
+            Effect.gen(function* () {
+              yield* Ref.update(stats, (state) => {
+                state.playerTeam = matched.TeamNum
+                return state
+              })
+              yield* Effect.logInfo(
+                `Found ${storedName} (matched "${matched.Name}") on team ${matched.TeamNum}`
+              )
+              ipc.send(
+                `status:Found ${storedName} (matched "${matched.Name}") on team ${matched.TeamNum}`
+              )
             })
-            yield* Effect.logInfo(
-              `Found ${storedName} (matched "${bestMatch.name}") on team ${player.TeamNum}`
-            )
-            ipc.send(
-              `status:Found ${storedName} (matched "${bestMatch.name}") on team ${player.TeamNum}`
-            )
-          }
-        } else {
-          yield* Effect.logWarning(
-            `No match found for "${storedName}" in current player list: ${current.lastPlayerList.map((p) => p.Name).join(', ')}`
-          )
-          yield* Ref.update(stats, (state) => {
-            state.playerTeam = null
-            return state
-          })
-          ipc.send(
-            `status:No match found for "${storedName}". Waiting for next match to prompt selection.`
-          )
-        }
+        })
       }
 
       // Track wins/losses on MatchEnded
@@ -231,22 +245,18 @@ const ipcHandler = Effect.gen(function* () {
         })
 
         const current = yield* stats
-        const bestMatch = findBestMatch(
-          newName,
-          current.lastPlayerList.map((p) => p.Name)
-        )
-        if (bestMatch) {
-          const player = current.lastPlayerList.find((p) => p.Name === bestMatch.name)
-          if (player) {
+        const player = findMatchedPlayer(newName, current.lastPlayerList)
+        yield* Option.map(player, (matched) =>
+          Effect.gen(function* () {
             yield* Ref.update(stats, (state) => {
-              state.playerTeam = player.TeamNum
+              state.playerTeam = matched.TeamNum
               return state
             })
             yield* Effect.logInfo(
-              `Re-matched "${newName}" (found "${bestMatch.name}") on team ${player.TeamNum}`
+              `Re-matched "${newName}" (found "${matched.Name}") on team ${matched.TeamNum}`
             )
-          }
-        }
+          })
+        )
       }
     })
   )
