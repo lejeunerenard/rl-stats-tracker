@@ -53,7 +53,7 @@ class IPCService extends Context.Tag('@rlstats-tracker/IPC')<
 
 const IPCServiceLive = Layer.succeed(IPCService, {
   send: (msg: string) => framed.write(msg),
-  messages: Stream.fromAsyncIterable<Buffer, string>(framed, () => 'stream-error').pipe(
+  messages: Stream.fromEventListener<string>(framed, 'data').pipe(
     Stream.map((buf: Buffer) => buf.toString()),
     Stream.catchAll(() => Stream.fromIterable([]))
   )
