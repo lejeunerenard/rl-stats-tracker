@@ -1,11 +1,15 @@
 import 'bare-encoding/global'
 
-import { Effect, Either, Option, Stream, Layer, Ref, Context } from 'effect'
+import { Effect, Either, Option, Stream, Layer, Ref, Context, LogLevel } from 'effect'
 import { RLStatsService, RLStatsServiceLive, ConfigLive, ConnectionServiceLive } from 'rl-stats-api'
 import FramedStream from 'framed-stream'
+import { LoggerLive } from '../services/logger.js'
 
 const framed = new FramedStream(Bare.IPC)
 const playerName = (Bare.argv[2] || '').trim()
+const workerLogPath = Bare.argv[4] || ''
+// TODO verify the arg is the info via schema potentially. Probably all args need validation
+const workerLogLevel = Bare.argv[5] || 'Info' as LogLevel.Literal
 
 // ---------------------------------------------------------------------------
 // Stats state (shared between Effect context and IPC handler)
@@ -277,8 +281,11 @@ const rlStatsLayer = RLStatsServiceLive.pipe(
 )
 
 const program = Effect.provide(
-  Effect.provide(Effect.provide(workerProgram, rlStatsLayer), StatsServiceLive),
-  IPCServiceLive
+  Effect.provide(
+    Effect.provide(Effect.provide(workerProgram, rlStatsLayer), StatsServiceLive),
+    IPCServiceLive
+  ),
+  LoggerLive(workerLogPath, workerLogLevel)
 )
 
 Effect.runPromise(program).catch((err: unknown) => {

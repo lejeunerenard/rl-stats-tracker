@@ -4,6 +4,7 @@ import process from 'bare-process'
 import os from 'bare-os'
 import { isWindows } from 'which-runtime'
 import path from 'bare-path'
+import fs from 'bare-fs'
 import pkg from './package.json'
 import App from './dist/app.js'
 import { Effect } from 'effect'
@@ -14,12 +15,28 @@ import { UIService } from './dist/services/ui.js'
 const appName = pkg.productName || pkg.name
 const isDev = path.basename(Bare.argv[0]) === (isWindows ? 'bare.exe' : 'bare')
 
+function createFileLogger(logPath) {
+  function log(message, level = 'info') {
+    const entry =
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: level.toUpperCase(),
+        message
+      }) + '\n'
+    fs.appendFileSync(logPath, entry)
+  }
+  return log
+}
+
 const cmd = command(
   appName,
   summary(pkg.description),
   flag('--version|-v', 'Print the current version'),
   flag('--username <name>', 'Rocket League player username to track (overrides config)'),
-  flag('--config <path>', 'Path to config file (default: ~/.rl-stats.json)')
+  flag('--config <path>', 'Path to config file (default: ~/.rl-stats.json)'),
+  flag('--log <path>', 'Path to log file (default: ~/.rl-stats.log)'),
+  flag('--log-level <level>', 'Minimum log level for file logging (default: Info)'),
+  flag('--json', 'Enable JSON structured output to stdout')
 )
 
 cmd.parse(Bare.argv.slice(isDev ? 2 : 1))
@@ -30,6 +47,8 @@ if (cmd.flags.version) {
 }
 
 const configPath = cmd.flags.config || path.join(os.homedir(), '.rl-stats.json')
+const logPath = cmd.flags.log || path.join(os.homedir(), '.rl-stats.log')
+const logLevelRaw = cmd.flags.logLevel || 'Info'
 
 const configService = new ConfigServiceLive()
 const uiService = Effect.runSync(
@@ -38,63 +57,61 @@ const uiService = Effect.runSync(
   }).pipe(Effect.provide(CLIServiceLive))
 )
 
-function logStderr(...args) {
-  console.error(...args)
-}
-
 function jsonOut(obj) {
+  if (!cmd.flags.json) return
   process.stdout.write(JSON.stringify(obj) + '\n')
 }
 
-function resolvePlayerName() {
+function resolvePlayerName(fileLogger) {
   if (cmd.flags.username) {
     return cmd.flags.username
   }
 
   const config = configService.load(configPath)
   if (config && config.username) {
-    logStderr(`Loaded username from config: ${config.username}`)
+    fileLogger(`Loaded username from config: ${config.username}`)
     return config.username
   }
 
-  logStderr(`Error: --username is required`)
-  logStderr(`Run with --username to set your player name, or create ${configPath}`)
-  logStderr(`Example: echo '{"username":"YourName"}' > ${configPath}`)
+  console.log(`Error: --username is required`)
+  console.log(`Run with --username to set your player name, or create ${configPath}`)
+  console.log(`Example: echo '{"username":"YourName"}' > ${configPath}`)
   Bare.exit(1)
 }
 
-const playerName = await resolvePlayerName()
+const fileLogger = createFileLogger(logPath)
+const playerName = await resolvePlayerName(fileLogger)
 
-const app = new App({ playerName, configPath })
+const app = new App({ playerName, configPath, logPath, logLevel: logLevelRaw })
 
 app.on('message', (message) => {
   if (message.startsWith('status:')) {
-    logStderr(message.slice(7))
+    fileLogger(message.slice(7))
   } else if (message.startsWith('stats:')) {
     const stats = JSON.parse(message.slice(6))
-    logStderr(`Stats: ${stats.wins}W / ${stats.losses}L / ${stats.totalMatches} matches`)
+    console.log(`Stats: ${stats.wins}W / ${stats.losses}L / ${stats.totalMatches} matches`)
     jsonOut({ type: 'stats', stats })
   } else if (message.startsWith('match:')) {
     const match = JSON.parse(message.slice(6))
-    logStderr(`Match: ${match.isWin ? 'Win' : 'Loss'} (team ${match.winnerTeam})`)
+    console.log(`Match: ${match.isWin ? 'Win' : 'Loss'} (team ${match.winnerTeam})`)
     jsonOut({ type: 'match', match })
   } else if (message.startsWith('error:')) {
-    logStderr(`[worker:error] ${message.slice(6)}`)
+    console.log(`[worker:error] ${message.slice(6)}`)
     jsonOut({ type: 'error', error: message.slice(6) })
   } else if (message.startsWith('prompt:choose-player:')) {
     const payload = JSON.parse(message.slice(21))
-    handlePlayerPrompt(payload)
+    handlePlayerPrompt(payload, fileLogger)
   } else {
-    logStderr(message)
+    fileLogger(message)
   }
 })
 
-async function handlePlayerPrompt(payload) {
+async function handlePlayerPrompt(payload, fileLogger) {
   const { names, currentStored } = payload
 
   try {
     const selectedName = await uiService.promptPlayer(names, currentStored)
-    logStderr(`Selected: ${selectedName}`)
+    fileLogger(`Selected: ${selectedName}`)
 
     configService.save(configPath, { username: selectedName })
 
@@ -104,7 +121,7 @@ async function handlePlayerPrompt(payload) {
   }
 }
 
-app.on('error', (err) => logStderr('[app:error]', err))
+app.on('error', (err) => console.log('[app:error]', err))
 
 process.on('SIGHUP', () => app.exit(129))
 process.on('SIGINT', () => app.exit(130))
@@ -113,8 +130,8 @@ process.on('SIGTERM', () => app.exit(143))
 
 try {
   await app.ready()
-  logStderr(`\nRL Stats Tracker ready. Tracking "${playerName}". Press Ctrl+C to stop.\n`)
+  fileLogger(`RL Stats Tracker ready. Tracking "${playerName}". Press Ctrl+C to stop.`)
 } catch (err) {
-  logStderr('[app:error]', err)
+  console.log('[app:error]', err)
   await app.close().finally(() => Bare.exit(1))
 }

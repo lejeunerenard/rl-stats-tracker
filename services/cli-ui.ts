@@ -3,77 +3,85 @@ import { Effect, Layer } from 'effect'
 import { UIService } from './ui.js'
 
 export const CLIServiceLive = Layer.succeed(UIService, {
-  log(message: string): void {
-    console.error(message)
+  log(message: string): Effect.Effect<void> {
+    return Effect.logInfo(message)
   },
 
   promptPlayer(names: string[], currentStored: string): Effect.Effect<string> {
-    return Effect.async((resume) => {
-      this.log('')
-      this.log(`Could not match stored username "${currentStored}" to any player in the game.`)
-      this.log(`Here are the players currently in the match:`)
-      this.log('')
+    return Effect.gen(function* () {
+      yield* Effect.logInfo('')
+      yield* Effect.logInfo(
+        `Could not match stored username "${currentStored}" to any player in the game.`
+      )
+      yield* Effect.logInfo(`Here are the players currently in the match:`)
+      yield* Effect.logInfo('')
 
-      names.forEach((name, i) => {
-        this.log(`  ${i + 1}. ${name}`)
-      })
+      for (let i = 0; i < names.length; i++) {
+        yield* Effect.logInfo(`  ${i + 1}. ${names[i]}`)
+      }
 
-      this.log('')
-      this.log(`Enter the number of the player you want to track, or type the name directly:`)
-
-      process.stdout.write(
-        JSON.stringify({ type: 'prompt', prompt: { names, currentStored } }) + '\n'
+      yield* Effect.logInfo('')
+      yield* Effect.logInfo(
+        `Enter the number of the player you want to track, or type the name directly:`
       )
 
-      const stdin = process.stdin
-      stdin.setRawMode(true)
+      return yield* Effect.async<string>((resume) => {
+        process.stdout.write(
+          JSON.stringify({ type: 'prompt', prompt: { names, currentStored } }) + '\n'
+        )
 
-      let buffer = ''
-      const onData = (chunk: Buffer) => {
-        buffer += chunk.toString()
+        const stdin = process.stdin
+        stdin.setRawMode(true)
 
-        if (buffer.includes('\n') || buffer.includes('\r')) {
-          const input = buffer.trim().replace(/\r?\n/, '')
-          buffer = ''
+        let buffer = ''
+        const onData = (chunk: Buffer) => {
+          buffer += chunk.toString()
 
-          let selectedName: string | null = null
+          if (buffer.includes('\n') || buffer.includes('\r')) {
+            const input = buffer.trim().replace(/\r?\n/, '')
+            buffer = ''
 
-          const num = parseInt(input, 10)
-          if (!isNaN(num) && num >= 1 && num <= names.length) {
-            selectedName = names[num - 1]
-          }
+            let selectedName: string | null = null
 
-          if (!selectedName) {
-            for (const name of names) {
-              if (name.toLowerCase().trim() === input.toLowerCase().trim()) {
-                selectedName = name
-                break
+            const num = parseInt(input, 10)
+            if (!isNaN(num) && num >= 1 && num <= names.length) {
+              selectedName = names[num - 1]
+            }
+
+            if (!selectedName) {
+              for (const name of names) {
+                if (name.toLowerCase().trim() === input.toLowerCase().trim()) {
+                  selectedName = name
+                  break
+                }
               }
             }
-          }
 
-          if (selectedName) {
-            this.log(`Selected: ${selectedName}`)
-            stdin.setRawMode(false)
-            stdin.removeListener('data', onData)
-            process.removeListener('SIGINT', onSigInt)
-            resume(Effect.succeed(selectedName))
-          } else {
-            this.log(
-              `Invalid selection. Enter a number (1-${names.length}) or the exact player name:`
-            )
+            if (selectedName) {
+              Effect.runSync(Effect.logInfo(`Selected: ${selectedName}`))
+              stdin.setRawMode(false)
+              stdin.removeListener('data', onData)
+              process.removeListener('SIGINT', onSigInt)
+              resume(Effect.succeed(selectedName))
+            } else {
+              Effect.runSync(
+                Effect.logInfo(
+                  `Invalid selection. Enter a number (1-${names.length}) or the exact player name:`
+                )
+              )
+            }
           }
         }
-      }
 
-      stdin.on('data', onData)
+        stdin.on('data', onData)
 
-      const onSigInt = () => {
-        stdin.setRawMode(false)
-        stdin.removeListener('data', onData)
-        process.exit(130)
-      }
-      process.on('SIGINT', onSigInt)
+        const onSigInt = () => {
+          stdin.setRawMode(false)
+          stdin.removeListener('data', onData)
+          process.exit(130)
+        }
+        process.on('SIGINT', onSigInt)
+      })
     })
   }
 })

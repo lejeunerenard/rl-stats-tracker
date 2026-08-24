@@ -1,15 +1,20 @@
 import FramedStream from 'framed-stream'
 import PearRuntime from 'pear-runtime'
 import ReadyResource = require('ready-resource')
+import type { LogLevel } from 'effect'
 
 interface AppOptions {
   playerName: string
   configPath: string
+  logPath: string
+  logLevel: LogLevel.Literal
 }
 
 export default class App extends ReadyResource {
   playerName: string
   configPath: string
+  logPath: string
+  logLevel: LogLevel.Literal
 
   private IPC: any
   private pipe: FramedStream
@@ -19,6 +24,8 @@ export default class App extends ReadyResource {
 
     this.playerName = opts.playerName
     this.configPath = opts.configPath
+    this.logPath = opts.logPath
+    this.logLevel = opts.logLevel
 
     this.IPC = null
     this.pipe = null as any
@@ -27,7 +34,9 @@ export default class App extends ReadyResource {
   async _open() {
     this.IPC = PearRuntime.run(require.resolve('./workers/main.js'), [
       this.playerName,
-      this.configPath
+      this.configPath,
+      this.logPath,
+      this.logLevel
     ])
     this.pipe = new FramedStream(this.IPC)
 
