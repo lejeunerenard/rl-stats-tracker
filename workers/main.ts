@@ -9,7 +9,7 @@ const framed = new FramedStream(Bare.IPC)
 const playerName = (Bare.argv[2] || '').trim()
 const workerLogPath = Bare.argv[4] || ''
 // TODO verify the arg is the info via schema potentially. Probably all args need validation
-const workerLogLevel = Bare.argv[5] || 'Info' as LogLevel.Literal
+const workerLogLevel: LogLevel.Literal = (Bare.argv[5] || 'Info') as LogLevel.Literal
 
 // ---------------------------------------------------------------------------
 // Stats state (shared between Effect context and IPC handler)
