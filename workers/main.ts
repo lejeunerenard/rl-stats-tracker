@@ -162,88 +162,84 @@ const apiHandler = Effect.gen(function* () {
   yield* Stream.fromQueue(requests).pipe(
     Stream.pipeThroughChannel(rlStats.parsed),
     Stream.runForEach((event) =>
-      Effect.gen(function* () {
-        if (Either.isLeft(event)) {
-          const error = Either.getLeft(event)
+      Either.match(event, {
+        onLeft: Effect.fnUntraced(function* (error) {
           yield* Effect.logError(`Schema error: ${error}`)
           ipc.send(`error:${JSON.stringify(error)}`)
-          return
-        }
+        }),
+        onRight: Effect.fnUntraced(function* ({ Event, Data }) {
+          // Track player team from UpdateState
+          if (Event === 'UpdateState') {
+            const players = Data.Players
 
-        const o = Either.getRight(event)
-        const { Event, Data } = Option.getOrElse(o, () => ({ Event: 'none' as const, Data: null }))
+            yield* Ref.update(stats, (state) => {
+              state.lastPlayerList = players
+              return state
+            })
 
-        // Track player team from UpdateState
-        if (Event === 'UpdateState') {
-          const players = Data.Players
+            const current = yield* stats
+            const storedName = current.playerName
+            const player = findMatchedPlayer(storedName, current.lastPlayerList)
 
-          yield* Ref.update(stats, (state) => {
-            state.lastPlayerList = players
-            return state
-          })
-
-          const current = yield* stats
-          const storedName = current.playerName
-          const player = findMatchedPlayer(storedName, current.lastPlayerList)
-
-          yield* Option.match(player, {
-            onNone: () =>
-              Effect.gen(function* () {
-                yield* Effect.logWarning(
-                  `No match found for "${storedName}" in current player list: ${current.lastPlayerList.map((p) => p.Name).join(', ')}`
-                )
-                yield* Ref.update(stats, (state) => {
-                  state.playerTeam = null
-                  return state
+            yield* Option.match(player, {
+              onNone: () =>
+                Effect.gen(function* () {
+                  yield* Effect.logWarning(
+                    `No match found for "${storedName}" in current player list: ${current.lastPlayerList.map((p) => p.Name).join(', ')}`
+                  )
+                  yield* Ref.update(stats, (state) => {
+                    state.playerTeam = null
+                    return state
+                  })
+                  ipc.send(
+                    `status:No match found for "${storedName}". Waiting for next match to prompt selection.`
+                  )
+                }),
+              onSome: (matched) =>
+                Effect.gen(function* () {
+                  yield* Ref.update(stats, (state) => {
+                    state.playerTeam = matched.TeamNum
+                    return state
+                  })
+                  yield* Effect.logInfo(
+                    `Found ${storedName} (matched "${matched.Name}") on team ${matched.TeamNum}`
+                  )
+                  ipc.send(
+                    `status:Found ${storedName} (matched "${matched.Name}") on team ${matched.TeamNum}`
+                  )
                 })
-                ipc.send(
-                  `status:No match found for "${storedName}". Waiting for next match to prompt selection.`
-                )
-              }),
-            onSome: (matched) =>
-              Effect.gen(function* () {
-                yield* Ref.update(stats, (state) => {
-                  state.playerTeam = matched.TeamNum
-                  return state
-                })
-                yield* Effect.logInfo(
-                  `Found ${storedName} (matched "${matched.Name}") on team ${matched.TeamNum}`
-                )
-                ipc.send(
-                  `status:Found ${storedName} (matched "${matched.Name}") on team ${matched.TeamNum}`
-                )
-              })
-          })
-        }
-
-        // Track wins/losses on MatchEnded
-        if (Event === 'MatchEnded') {
-          const winnerTeam = Data.WinnerTeamNum
-          const current = yield* stats
-          const isWin = current.playerTeam === winnerTeam
-
-          yield* Ref.update(stats, (state) => {
-            state.wins += isWin ? 1 : 0
-            state.losses += isWin ? 0 : 1
-            state.totalMatches += 1
-            return state
-          })
-
-          const updated = yield* stats
-          yield* Effect.logInfo(
-            `Match ended! ${isWin ? 'Win' : 'Loss'} — ${updated.wins}W/${updated.losses}L/${updated.totalMatches} total`
-          )
-          ipc.send(`stats:${JSON.stringify(updated)}`)
-          ipc.send(`match:${JSON.stringify({ winnerTeam, isWin })}`)
-
-          // If we still don't have a player team, prompt user to select
-          if (updated.playerTeam === null && updated.lastPlayerList.length > 0) {
-            const names = updated.lastPlayerList.map((p) => p.Name)
-            ipc.send(
-              `prompt:choose-player:${JSON.stringify({ names, currentStored: updated.playerName })}`
-            )
+            })
           }
-        }
+
+          // Track wins/losses on MatchEnded
+          if (Event === 'MatchEnded') {
+            const winnerTeam = Data.WinnerTeamNum
+            const current = yield* stats
+            const isWin = current.playerTeam === winnerTeam
+
+            yield* Ref.update(stats, (state) => {
+              state.wins += isWin ? 1 : 0
+              state.losses += isWin ? 0 : 1
+              state.totalMatches += 1
+              return state
+            })
+
+            const updated = yield* stats
+            yield* Effect.logInfo(
+              `Match ended! ${isWin ? 'Win' : 'Loss'} — ${updated.wins}W/${updated.losses}L/${updated.totalMatches} total`
+            )
+            ipc.send(`stats:${JSON.stringify(updated)}`)
+            ipc.send(`match:${JSON.stringify({ winnerTeam, isWin })}`)
+
+            // If we still don't have a player team, prompt user to select
+            if (updated.playerTeam === null && updated.lastPlayerList.length > 0) {
+              const names = updated.lastPlayerList.map((p) => p.Name)
+              ipc.send(
+                `prompt:choose-player:${JSON.stringify({ names, currentStored: updated.playerName })}`
+              )
+            }
+          }
+        })
       })
     )
   )
