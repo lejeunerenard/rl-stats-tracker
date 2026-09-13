@@ -1,6 +1,7 @@
 import 'bare-encoding/global'
 
 import {
+  Console,
   Effect,
   Either,
   Option,
@@ -156,6 +157,8 @@ const apiHandler = Effect.gen(function* () {
   const stats = yield* StatsService
   const ipc = yield* IPCService
 
+  yield* Console.log('Requesting API socket')
+
   // Unused atm but will be used for sending commands to RL
   const requests = yield* Queue.unbounded<string>()
 
@@ -243,6 +246,11 @@ const apiHandler = Effect.gen(function* () {
       })
     )
   )
+
+  yield* Console.log('API socket closed')
+  ipc.send(`status: At the end of apiHandler`)
+
+  yield* Effect.fail('Lost connection')
 })
 
 const ipcHandler = Effect.gen(function* () {
@@ -280,7 +288,7 @@ const ipcHandler = Effect.gen(function* () {
 })
 
 const workerProgram = Effect.gen(function* () {
-  yield* Effect.forkDaemon(apiHandler)
+  yield* Effect.forkDaemon(apiHandler.pipe(Effect.retry(Schedule.spaced('1 second'))))
   yield* Effect.forkDaemon(ipcHandler)
 })
 
