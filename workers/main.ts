@@ -1,6 +1,18 @@
 import 'bare-encoding/global'
 
-import { Effect, Either, Option, Stream, Layer, Ref, Context, LogLevel } from 'effect'
+import {
+  Console,
+  Effect,
+  Either,
+  Option,
+  Queue,
+  Stream,
+  Schedule,
+  Layer,
+  Ref,
+  Context,
+  LogLevel
+} from 'effect'
 import { RLStatsService, RLStatsServiceLive, ConfigLive, ConnectionServiceLive } from 'rl-stats-api'
 import FramedStream from 'framed-stream'
 import { LoggerLive } from '../services/logger.js'
@@ -145,91 +157,100 @@ const apiHandler = Effect.gen(function* () {
   const stats = yield* StatsService
   const ipc = yield* IPCService
 
-  yield* Stream.runForEach(rlStats.parsed, (event) =>
-    Effect.gen(function* () {
-      if (Either.isLeft(event)) {
-        const error = Either.getLeft(event)
-        yield* Effect.logError(`Schema error: ${error}`)
-        ipc.send(`error:${JSON.stringify(error)}`)
-        return
-      }
+  yield* Console.log('Requesting API socket')
 
-      const o = Either.getRight(event)
-      const { Event, Data } = Option.getOrElse(o, () => ({ Event: 'none' as const, Data: null }))
+  // Unused atm but will be used for sending commands to RL
+  const requests = yield* Queue.unbounded<string>()
 
-      // Track player team from UpdateState
-      if (Event === 'UpdateState') {
-        const players = Data.Players
+  yield* Stream.fromQueue(requests).pipe(
+    Stream.pipeThroughChannel(rlStats.parsed),
+    Stream.runForEach((event) =>
+      Either.match(event, {
+        onLeft: Effect.fnUntraced(function* (error) {
+          yield* Effect.logError(`Schema error: ${error}`)
+          ipc.send(`error:${JSON.stringify(error)}`)
+        }),
+        onRight: Effect.fnUntraced(function* ({ Event, Data }) {
+          // Track player team from UpdateState
+          if (Event === 'UpdateState') {
+            const players = Data.Players
 
-        yield* Ref.update(stats, (state) => {
-          state.lastPlayerList = players
-          return state
-        })
-
-        const current = yield* stats
-        const storedName = current.playerName
-        const player = findMatchedPlayer(storedName, current.lastPlayerList)
-
-        yield* Option.match(player, {
-          onNone: () =>
-            Effect.gen(function* () {
-              yield* Effect.logWarning(
-                `No match found for "${storedName}" in current player list: ${current.lastPlayerList.map((p) => p.Name).join(', ')}`
-              )
-              yield* Ref.update(stats, (state) => {
-                state.playerTeam = null
-                return state
-              })
-              ipc.send(
-                `status:No match found for "${storedName}". Waiting for next match to prompt selection.`
-              )
-            }),
-          onSome: (matched) =>
-            Effect.gen(function* () {
-              yield* Ref.update(stats, (state) => {
-                state.playerTeam = matched.TeamNum
-                return state
-              })
-              yield* Effect.logInfo(
-                `Found ${storedName} (matched "${matched.Name}") on team ${matched.TeamNum}`
-              )
-              ipc.send(
-                `status:Found ${storedName} (matched "${matched.Name}") on team ${matched.TeamNum}`
-              )
+            yield* Ref.update(stats, (state) => {
+              state.lastPlayerList = players
+              return state
             })
+
+            const current = yield* stats
+            const storedName = current.playerName
+            const player = findMatchedPlayer(storedName, current.lastPlayerList)
+
+            yield* Option.match(player, {
+              onNone: () =>
+                Effect.gen(function* () {
+                  yield* Effect.logWarning(
+                    `No match found for "${storedName}" in current player list: ${current.lastPlayerList.map((p) => p.Name).join(', ')}`
+                  )
+                  yield* Ref.update(stats, (state) => {
+                    state.playerTeam = null
+                    return state
+                  })
+                  ipc.send(
+                    `status:No match found for "${storedName}". Waiting for next match to prompt selection.`
+                  )
+                }),
+              onSome: (matched) =>
+                Effect.gen(function* () {
+                  yield* Ref.update(stats, (state) => {
+                    state.playerTeam = matched.TeamNum
+                    return state
+                  })
+                  yield* Effect.logInfo(
+                    `Found ${storedName} (matched "${matched.Name}") on team ${matched.TeamNum}`
+                  )
+                  ipc.send(
+                    `status:Found ${storedName} (matched "${matched.Name}") on team ${matched.TeamNum}`
+                  )
+                })
+            })
+          }
+
+          // Track wins/losses on MatchEnded
+          if (Event === 'MatchEnded') {
+            const winnerTeam = Data.WinnerTeamNum
+            const current = yield* stats
+            const isWin = current.playerTeam === winnerTeam
+
+            yield* Ref.update(stats, (state) => {
+              state.wins += isWin ? 1 : 0
+              state.losses += isWin ? 0 : 1
+              state.totalMatches += 1
+              return state
+            })
+
+            const updated = yield* stats
+            yield* Effect.logInfo(
+              `Match ended! ${isWin ? 'Win' : 'Loss'} — ${updated.wins}W/${updated.losses}L/${updated.totalMatches} total`
+            )
+            ipc.send(`stats:${JSON.stringify(updated)}`)
+            ipc.send(`match:${JSON.stringify({ winnerTeam, isWin })}`)
+
+            // If we still don't have a player team, prompt user to select
+            if (updated.playerTeam === null && updated.lastPlayerList.length > 0) {
+              const names = updated.lastPlayerList.map((p) => p.Name)
+              ipc.send(
+                `prompt:choose-player:${JSON.stringify({ names, currentStored: updated.playerName })}`
+              )
+            }
+          }
         })
-      }
-
-      // Track wins/losses on MatchEnded
-      if (Event === 'MatchEnded') {
-        const winnerTeam = Data.WinnerTeamNum
-        const current = yield* stats
-        const isWin = current.playerTeam === winnerTeam
-
-        yield* Ref.update(stats, (state) => {
-          state.wins += isWin ? 1 : 0
-          state.losses += isWin ? 0 : 1
-          state.totalMatches += 1
-          return state
-        })
-
-        const updated = yield* stats
-        yield* Effect.logInfo(
-          `Match ended! ${isWin ? 'Win' : 'Loss'} — ${updated.wins}W/${updated.losses}L/${updated.totalMatches} total`
-        )
-        ipc.send(`stats:${JSON.stringify(updated)}`)
-        ipc.send(`match:${JSON.stringify({ winnerTeam, isWin })}`)
-
-        // If we still don't have a player team, prompt user to select
-        if (updated.playerTeam === null && updated.lastPlayerList.length > 0) {
-          const names = updated.lastPlayerList.map((p) => p.Name)
-          ipc.send(
-            `prompt:choose-player:${JSON.stringify({ names, currentStored: updated.playerName })}`
-          )
-        }
-      }
-    })
+      })
+    )
   )
+
+  yield* Console.log('API socket closed')
+  ipc.send(`status: At the end of apiHandler`)
+
+  yield* Effect.fail('Lost connection')
 })
 
 const ipcHandler = Effect.gen(function* () {
@@ -267,7 +288,7 @@ const ipcHandler = Effect.gen(function* () {
 })
 
 const workerProgram = Effect.gen(function* () {
-  yield* Effect.forkDaemon(apiHandler)
+  yield* Effect.forkDaemon(apiHandler.pipe(Effect.retry(Schedule.spaced('1 second'))))
   yield* Effect.forkDaemon(ipcHandler)
 })
 
