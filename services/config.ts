@@ -2,6 +2,8 @@ import fs from 'bare-fs'
 
 export interface Config {
   username?: string
+  saveReplays?: boolean
+  replayShortcut?: string
 }
 
 export interface ConfigService {

@@ -16,6 +16,7 @@ import {
 import { RLStatsService, RLStatsServiceLive, ConfigLive, ConnectionServiceLive } from 'rl-stats-api'
 import FramedStream from 'framed-stream'
 import { LoggerLive } from '../services/logger.js'
+import { ReplayService, ReplayServiceLive } from '../services/replay.js'
 
 const framed = new FramedStream(Bare.IPC)
 const playerName = (Bare.argv[2] || '').trim()
@@ -234,6 +235,9 @@ const apiHandler = Effect.gen(function* () {
             ipc.send(`stats:${JSON.stringify(updated)}`)
             ipc.send(`match:${JSON.stringify({ winnerTeam, isWin })}`)
 
+            const replay = yield* ReplayService
+            yield* Effect.forkDaemon(replay.saveReplay(''))
+
             // If we still don't have a player team, prompt user to select
             if (updated.playerTeam === null && updated.lastPlayerList.length > 0) {
               const names = updated.lastPlayerList.map((p) => p.Name)
@@ -303,8 +307,11 @@ const rlStatsLayer = RLStatsServiceLive.pipe(
 
 const program = Effect.provide(
   Effect.provide(
-    Effect.provide(Effect.provide(workerProgram, rlStatsLayer), StatsServiceLive),
-    IPCServiceLive
+    Effect.provide(
+      Effect.provide(Effect.provide(workerProgram, rlStatsLayer), StatsServiceLive),
+      IPCServiceLive
+    ),
+    ReplayServiceLive
   ),
   LoggerLive(workerLogPath, workerLogLevel)
 )
