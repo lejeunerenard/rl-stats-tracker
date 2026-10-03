@@ -23,7 +23,7 @@
   },
   "dependencies": {
     "effect": "^3.22.0",
-    "framed-stream": "^1.0.1",
+    "framed-stream": "github:holepunchto/framed-stream",
     "paparam": "^1.10.1",
     "pear-runtime": "^1.2.0",
     "ready-resource": "^1.2.0",
@@ -31,7 +31,7 @@
     "robotjs": "^0.9.1"
   },
   "devDependencies": {
-    "@types/node": "^26.1.2",
+    "@types/node": "^26.6.4",
     "bare-build": "^1.0.2",
     "bare-runtime": "1.29.4",
     "brittle": "^3.19.0",

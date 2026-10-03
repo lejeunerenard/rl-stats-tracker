@@ -2,6 +2,7 @@ import 'bare-encoding/global'
 
 import {
   Console,
+  Cause,
   Effect,
   Either,
   Option,
@@ -14,11 +15,10 @@ import {
   LogLevel
 } from 'effect'
 import { RLStatsService, RLStatsServiceLive, ConfigLive, ConnectionServiceLive } from 'rl-stats-api'
-import FramedStream from 'framed-stream'
 import { LoggerLive } from '../services/logger.js'
 import { ReplayService, ReplayServiceLive } from '../services/replay.js'
+import { IPCService, IPCServiceLive } from '../services/bare-ipc.js'
 
-const framed = new FramedStream(Bare.IPC)
 const playerName = (Bare.argv[2] || '').trim()
 const workerLogPath = Bare.argv[4] || ''
 // TODO verify the arg is the info via schema potentially. Probably all args need validation
@@ -62,19 +62,6 @@ class StatsService extends Context.Tag('@rlstats-tracker/Stats')<
 
 const statsRef = Ref.make(statsState)
 const StatsServiceLive = Layer.effect(StatsService, statsRef)
-
-class IPCService extends Context.Tag('@rlstats-tracker/IPC')<
-  IPCService,
-  { send: (msg: string) => void; messages: Stream.Stream<string> }
->() {}
-
-const IPCServiceLive = Layer.succeed(IPCService, {
-  send: (msg: string) => framed.write(msg),
-  messages: Stream.fromEventListener<string>(framed, 'data').pipe(
-    Stream.map((buf: Buffer) => buf.toString()),
-    Stream.catchAll(() => Stream.fromIterable([]))
-  )
-})
 
 // ---------------------------------------------------------------------------
 // Flexible name matching
@@ -291,10 +278,18 @@ const ipcHandler = Effect.gen(function* () {
   )
 })
 
-const workerProgram = Effect.gen(function* () {
+const workerProgram = Effect.catchAllDefect(Effect.gen(function* () {
   yield* Effect.forkDaemon(apiHandler.pipe(Effect.retry(Schedule.spaced('1 second'))))
   yield* Effect.forkDaemon(ipcHandler)
-})
+}), (defect) => Effect.gen(function* () {
+  const ipc = yield* IPCService
+  if (Cause.isRuntimeException(defect)) {
+    yield* Console.error('Worker error:', defect.message)
+    return ipc.send(`RuntimeException defect caught: ${defect.message}`)
+  }
+  yield* Console.error("Unknown defect caught.")
+  return ipc.send("Unknown defect caught.")
+}))
 
 // ---------------------------------------------------------------------------
 // Compose & run
@@ -316,7 +311,4 @@ const program = Effect.provide(
   LoggerLive(workerLogPath, workerLogLevel)
 )
 
-Effect.runPromise(program).catch((err: unknown) => {
-  console.error('Worker error:', err)
-  framed.write(`error:${JSON.stringify(err)}`)
-})
+Effect.runPromise(program)

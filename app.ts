@@ -1,5 +1,6 @@
 import FramedStream from 'framed-stream'
 import PearRuntime from 'pear-runtime'
+import { type Duplex } from 'streamx'
 import ReadyResource = require('ready-resource')
 import type { LogLevel } from 'effect'
 
@@ -16,8 +17,8 @@ export default class App extends ReadyResource {
   logPath: string
   logLevel: LogLevel.Literal
 
-  private IPC: any
-  private pipe: FramedStream
+  private IPC: Duplex | null
+  private pipe: FramedStream | null
 
   constructor(opts: AppOptions) {
     super()
@@ -37,7 +38,7 @@ export default class App extends ReadyResource {
       this.configPath,
       this.logPath,
       this.logLevel
-    ])
+    ]) as Duplex
     this.pipe = new FramedStream(this.IPC)
 
     this.pipe.on('data', (data: Buffer) => this._onmessage(data))

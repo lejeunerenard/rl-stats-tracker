@@ -3,13 +3,7 @@ declare var Bare: {
   argv: string[]
   exit(code?: number): void
   exitCode: number
-  IPC: {
-    on(event: string, handler: (...args: any[]) => void): any
-    write(data: string | Buffer): void
-    destroy(): void
-    once(event: string, handler: (...args: any[]) => void): any
-    pipe(dest: any): any
-  }
+  IPC: Duplex
 }
 
 declare var process: {
