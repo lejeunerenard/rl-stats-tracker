@@ -10,7 +10,7 @@ export class IPCService extends Context.Tag('@rlstats-tracker/IPC')<
 
 export const IPCServiceLive = Layer.succeed(IPCService, {
   send: (msg: string) => framed.write(msg),
-  messages: Stream.fromEventListener<string>(framed, 'data').pipe(
+  messages: Stream.fromEventListener<string>(framed as unknown as Stream.EventListener<string>, 'data').pipe(
     Stream.catchAll(() => Stream.fromIterable([]))
   )
 })
