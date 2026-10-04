@@ -9,18 +9,22 @@ export class ReplayService extends Context.Tag('@rlstats-tracker/Replay')<
 export const ReplayServiceLive = Layer.succeed(ReplayService, {
   saveReplay: () =>
     Effect.gen(function* () {
-      const shortcut = yield* Config.string('replayShortcut').pipe(Config.withDefault('ctrl+s'))
+      const shortcut = yield* Config.string('replayShortcut').pipe(Config.withDefault('end'))
       const saveReplays = yield* Config.boolean('saveReplays').pipe(Config.withDefault(true))
       if (!saveReplays) return
 
+      yield* Effect.log('shortcut', shortcut)
+
+      // Pause from event
       yield* Effect.sleep('1 second')
 
-      try {
-        yield* Effect.try(() => {
-          robot.keyTap(shortcut)
-        })
-      } catch (err) {
-        yield* Effect.logError('[replay] Failed to save replay:', err)
-      }
+      // Press, wait un-press
+      yield* Effect.try(() => {
+        robot.keyToggle(shortcut, 'down')
+      })
+      yield* Effect.sleep('10 second')
+      yield* Effect.try(() => {
+        robot.keyToggle(shortcut, 'up')
+      })
     }).pipe(Effect.catchAll((err) => Effect.logError('[replay]', err)))
 })
