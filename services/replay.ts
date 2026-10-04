@@ -6,23 +6,21 @@ export class ReplayService extends Context.Tag('@rlstats-tracker/Replay')<
   { saveReplay: (replayName: string) => Effect.Effect<void> }
 >() {}
 
-export const ReplayServiceLive = Layer.sync(ReplayService, () => {
-  return {
-    saveReplay: () =>
-      Effect.gen(function* () {
-        const shortcut = yield* Config.string('replayShortcut').pipe(Config.withDefault('ctrl+s'))
-        const saveReplays = yield* Config.boolean('saveReplays').pipe(Config.withDefault(true))
-        if (!saveReplays) return
+export const ReplayServiceLive = Layer.succeed(ReplayService, {
+  saveReplay: () =>
+    Effect.gen(function* () {
+      const shortcut = yield* Config.string('replayShortcut').pipe(Config.withDefault('ctrl+s'))
+      const saveReplays = yield* Config.boolean('saveReplays').pipe(Config.withDefault(true))
+      if (!saveReplays) return
 
-        yield* Effect.sleep('1 second')
+      yield* Effect.sleep('1 second')
 
-        try {
-          yield* Effect.try(() => {
-            robot.keyTap(shortcut)
-          })
-        } catch (err) {
-          yield* Effect.logError('[replay] Failed to save replay:', err)
-        }
-      }).pipe(Effect.catchAll((err) => Effect.logError('[replay]', err)))
-  }
+      try {
+        yield* Effect.try(() => {
+          robot.keyTap(shortcut)
+        })
+      } catch (err) {
+        yield* Effect.logError('[replay] Failed to save replay:', err)
+      }
+    }).pipe(Effect.catchAll((err) => Effect.logError('[replay]', err)))
 })

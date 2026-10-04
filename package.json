@@ -19,7 +19,8 @@
     "make:linux-arm64": "bare-build --name rl-stats-tracker --standalone --host linux-arm64 --out ./out/linux-arm64 bin.mjs",
     "make:linux-x64": "bare-build --name rl-stats-tracker --standalone --host linux-x64 --out ./out/linux-x64 bin.mjs",
     "make:win32-arm64": "bare-build --name rl-stats-tracker --standalone --host win32-arm64 --out ./out/win32-arm64 bin.mjs",
-    "make:win32-x64": "bare-build --name rl-stats-tracker --standalone --host win32-x64 --out ./out/win32-x64 bin.mjs"
+    "make:win32-x64": "bare-build --name rl-stats-tracker --standalone --host win32-x64 --out ./out/win32-x64 bin.mjs",
+    "postinstall": "node scripts/link-robotjs-prebuild.js"
   },
   "dependencies": {
     "effect": "^3.22.0",
