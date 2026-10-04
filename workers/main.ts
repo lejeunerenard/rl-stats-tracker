@@ -202,6 +202,11 @@ const apiHandler = Effect.gen(function* () {
             })
           }
 
+          if (Event === 'MatchInitialized') {
+            const replay = yield* ReplayService
+            yield* Effect.forkDaemon(replay.saveReplay(''))
+          }
+
           // Track wins/losses on MatchEnded
           if (Event === 'MatchEnded') {
             const winnerTeam = Data.WinnerTeamNum
@@ -221,9 +226,6 @@ const apiHandler = Effect.gen(function* () {
             )
             ipc.send(`stats:${JSON.stringify(updated)}`)
             ipc.send(`match:${JSON.stringify({ winnerTeam, isWin })}`)
-
-            const replay = yield* ReplayService
-            yield* Effect.forkDaemon(replay.saveReplay(''))
 
             // If we still don't have a player team, prompt user to select
             if (updated.playerTeam === null && updated.lastPlayerList.length > 0) {
